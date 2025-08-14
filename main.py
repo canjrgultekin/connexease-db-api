@@ -1,6 +1,11 @@
 import os
+import json
 import asyncpg
+import uuid
+import datetime
+import decimal
 from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -13,16 +18,35 @@ DB_CONN = os.getenv(
 class QueryRequest(BaseModel):
     query: str
 
+def json_serializer(obj):
+    """PostgreSQL özel tiplerini JSON stringe çevirir"""
+    if isinstance(obj, uuid.UUID):
+        return str(obj)
+    if isinstance(obj, (datetime.datetime, datetime.date)):
+        return obj.isoformat()
+    if isinstance(obj, decimal.Decimal):
+        return float(obj)  # veya str(obj)
+    if isinstance(obj, bytes):
+        return obj.decode(errors="ignore")
+    return str(obj)
+
 @app.get("/")
 async def root():
     return {"status": "ok"}
 
-@app.post("/run-query")
+@app.post("/run-query", response_class=PlainTextResponse)
 async def run_query(req: QueryRequest):
     try:
         conn = await asyncpg.connect(DB_CONN, ssl="require")
         results = await conn.fetch(req.query)
         await conn.close()
-        return {"status": "success", "rows": [dict(r) for r in results]}
+        return json.dumps(
+            {"status": "success", "rows": [dict(r) for r in results]},
+            ensure_ascii=False,
+            default=json_serializer
+        )
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        return json.dumps(
+            {"status": "error", "error": str(e)},
+            ensure_ascii=False
+        )
