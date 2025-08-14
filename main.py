@@ -25,7 +25,7 @@ def json_serializer(obj):
     if isinstance(obj, (datetime.datetime, datetime.date)):
         return obj.isoformat()
     if isinstance(obj, decimal.Decimal):
-        return float(obj)  # veya str(obj)
+        return float(obj)
     if isinstance(obj, bytes):
         return obj.decode(errors="ignore")
     return str(obj)
@@ -40,13 +40,18 @@ async def run_query(req: QueryRequest):
         conn = await asyncpg.connect(DB_CONN, ssl="require")
         results = await conn.fetch(req.query)
         await conn.close()
-        return json.dumps(
+
+        json_data = json.dumps(
             {"status": "success", "rows": [dict(r) for r in results]},
             ensure_ascii=False,
             default=json_serializer
         )
+        # JSON'u kod bloğu içinde döndür
+        return f"```json\n{json_data}\n```"
+
     except Exception as e:
-        return json.dumps(
+        error_data = json.dumps(
             {"status": "error", "error": str(e)},
             ensure_ascii=False
         )
+        return f"```json\n{error_data}\n```"
